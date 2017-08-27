@@ -1,0 +1,10 @@
+---
+# Default variables for this role
+
+# SMTP relay configuration
+relay_host: smtp.relay.com
+relay_port: 25
+
+# SMTP relay authentication
+relay_user: MyUser
+relay_password: MyPassword

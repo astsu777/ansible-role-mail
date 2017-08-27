@@ -1,0 +1,3 @@
+---
+# Install PostFix as mail server 
+- include: postfix.yml

@@ -1,0 +1,84 @@
+---
+- name: (MAIL) Remove all default mail server
+  package:
+    name: "{{ item }}"
+    state: absent
+  with_items:
+    - exim4*
+  when: ansible_os_family == "Debian"
+
+- name: (MAIL) Install Postfix Mail server and utilities
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - postfix
+    - mailutils
+    - ca-certificates
+
+# Check if SASL database already exists
+- name: (MAIL) Check if SASL database already exists
+  stat:
+    path: /etc/postfix/sasl_passwd
+  register: sasldatabase
+
+- name: (MAIL) Create SASL database
+  file:
+    path: /etc/postfix/sasl_passwd
+    state: touch
+    owner: root
+    group: root
+    mode: 0600
+  when: not sasldatabase.stat.exists
+
+- name: (MAIL) Configure SASL database for relay
+  lineinfile:
+    path: /etc/postfix/sasl_passwd
+    state: present
+    line: "[{{ relay_host }}]:{{ relay_port }} {{ relay_user }}:{{ relay_password }}"
+  register: saslconfiguration
+  when: not sasldatabase.stat.exists
+
+- name: (MAIL) Initialize SASL database
+  command: "postmap /etc/postfix/sasl_passwd"
+  notify: restart postfix
+  when: saslconfiguration|changed
+
+- name: (MAIL) Enable mail submission to a relay
+  lineinfile:
+    path: /etc/postfix/master.cf
+    regexp: '^#submission inet'
+    state: present
+    line: "submission inet n       -       -       -       -       smtpd"
+    backrefs: yes
+  notify: restart postfix
+
+- name: (MAIL) Define 'My Origin' in Postfix configuration
+  lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: '^#myorigin'
+    state: present
+    line: "myorigin = /etc/mailname"
+    backrefs: yes
+  notify: reload postfix
+
+- name: (MAIL) Define 'relayhost' in Postfix configuration
+  lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: '^relayhost'
+    state: present
+    line: "relayhost = [{{ relay_host }}]:{{ relay_port }}"
+    backrefs: yes
+  notify: reload postfix
+
+- name: (MAIL) Configure the mail relay
+  blockinfile:
+    path: /etc/postfix/main.cf
+    marker: "# {mark} Relay configuration"
+    block: |
+      smtp_sasl_auth_enable = yes
+      smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+      smtp_sasl_security_options = noanonymous
+      smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
+      smtp_use_tls = yes
+  notify: reload postfix
