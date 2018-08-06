@@ -1,4 +1,16 @@
 ---
+## Role Variables
+- name: (MAIL) Set mail utilities package name for Debian OS family
+  set_fact:
+    mail_tools: "mailutils"
+  when: ansible_os_family == "Debian"
+
+- name: (MAIL) Set mail utilities package name for Red Hat OS family
+  set_fact:
+    mail_tools: "mailx"
+  when: ansible_os_family == "RedHat"
+
+## Actions
 - name: (MAIL) Remove all default mail server
   package:
     name: "{{ item }}"
@@ -13,7 +25,7 @@
     state: latest
   with_items:
     - postfix
-    - mailutils
+    - "{{ mail_tools }}"
     - ca-certificates
 
 # Check if SASL database already exists
@@ -42,7 +54,7 @@
 - name: (MAIL) Initialize SASL database
   command: "postmap /etc/postfix/sasl_passwd"
   notify: restart postfix
-  when: saslconfiguration|changed
+  when: saslconfiguration is changed
 
 - name: (MAIL) Enable mail submission to a relay
   lineinfile:
